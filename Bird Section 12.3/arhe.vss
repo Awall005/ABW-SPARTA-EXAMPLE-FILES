@@ -1,0 +1,14 @@
+# VSS collision model parameters for each species
+
+# species (or species pair)
+# diameter (m) – (From Table A3 Bird for VSS, From T.A2 if VHS) Avg if Species Pair 
+# omega – From Table A1 Bird (This is the Same for VHS and VSS)
+# tref – From Table A3 Bird
+# alpha – From Table A3 Bird (VSS Table A3, If VHS Model alpha = 1)
+# for species pair collisions get omega and alpha from Bird table A4
+
+
+Ar  	4.11E-10    0.81	273   1.40
+He	2.30E-10	0.66	273	1.26
+
+Ar He  3.205E-10	0.725	273	1.64
