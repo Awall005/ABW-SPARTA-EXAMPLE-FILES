@@ -1,0 +1,143 @@
+################################################################################
+# 2d flow around a flat plate
+#
+# Note:
+#  - The "comm/sort” option to the “global” command is used to match MPI runs.
+#  - The “twopass” option is used to match Kokkos runs.
+# The "comm/sort" and "twopass" options should not be used for production runs.
+################################################################################
+
+
+########## INITIALIZATION ############
+seed	    	    12345
+dimension   	    2
+global              gridcut 0.0 comm/sort yes
+
+######### BOUNDARY CONDITIONS ###########
+# This comes from the articals text. x is inflow and outflow, y is reflective. z being periodic because its not used and should not affect simulation
+boundary	    o r p
+
+######## DOMAIN GEOMETRY ##########
+create_box  	    -0.025 0.155 -0.1025 0.1025 -0.00025 0.00025
+
+######## GRID SETUP ###############
+create_grid 	    360 410 1 
+balance_grid        rcb cell
+# Rebalancing the how the processors are loaded as was done in artical
+fix                 1 balance 4000 1.3 rcb cell
+
+######## GAS SPECIES AND MIXTURE ######################
+species         N2.species N2
+mixture         gas N2 vstream 1504.0 0 0 temp 13.34 nrho 3.716e20
+
+######## SIMULATION PARTICAL WEIGHTING ##########
+# fnum was calculated based off of a desired 10 particals in each cell and nrho amount shown in mixture
+global		    fnum 9.29e12
+
+####### GAS COLLISION MODEL #############
+collide         vss gas N2.vhs
+collide_modify  rotate smooth vibrate no
+
+fix             in emit/face gas xlo twopass
+
+
+######## SURFACE GEOMETRY AND COLLISION MODEL ##############
+read_surf	    data.flatplate403 trans 0 0 0 
+surf_collide	    1 diffuse 290.0 1.0
+surf_modify         all collide 1
+
+######## COMPUTE: GRID PROPERTIES #################
+compute             gcomp grid all all u v w massrho nrho trot
+compute             gtcomp thermal/grid all all temp 
+compute             gpcomp thermal/grid all all press
+compute             hfcomp eflux/grid all species heatx heaty heatz
+compute             mfcomp pflux/grid all species momxy
+
+
+###### TIME AVG FIXES GRID PROPETIES (will be reset after transient) ##############
+fix                 gfix ave/grid all 10 100 1000 c_gcomp[*]
+fix                 gtfix ave/grid all 10 100 1000 c_gtcomp[*] 
+fix                 gpfix ave/grid all 10 100 1000 c_gpcomp[*]
+fix                 hfix ave/grid all 10 100 1000 c_hfcomp[*]
+fix                 mfix ave/grid all 10 100 1000 c_mfcomp[*]
+
+####### OUTPUT FILES GRID PROPERTIES (will be enabled after transient)  ########
+dump                gdump grid all 1000 grid.*.dat id xc yc f_gfix[*] f_gtfix[*] f_gpfix[*] f_hfix[*] f_mfix[*]
+
+
+###### COMPUTE/FIX/DUMP SURFACE PROPERTIES ####
+compute 	    scomp surf all gas press shx shy shz etot ke 
+compute         sgeom property/surf all id xc yc
+
+fix		        sfix ave/surf all 10 100 1000 c_scomp[*]
+
+dump 		    sdump surf all 1000 surf.*.dat c_sgeom[*] f_sfix[*]
+
+
+###### STATISTICS OUTPUT ###########
+stats               100 
+stats_style         step cpu np nattempt ncoll nscoll nscheck
+
+
+###### GLOBAL TIMESTEP SIZE #############
+timestep 	    3.102e-7
+
+######### IMAGE DUMP IF NEEDED ##########
+#dump                2 image all 50 image.*.ppm type type pdiam 0.001 &
+#                    surf proc 0.01 size 512 512 axes yes 0.9 0.02
+#dump_modify	    2 pad 4
+
+
+##### TRANISENT RUN ###########
+undump              gdump
+undump 		        sdump
+
+print               "======================================================================"
+print               "FULL SUPERSONIC FLATPLATE SIMULATION"
+print               "======================================================================"
+print               "PHASE 1: Running transient period (8000 steps)"
+print               "======================================================================"
+
+run 		    8000
+
+#### STEADY STATE PERIOD (SAVE DATA) ##########
+
+
+
+print               "======================================================================"
+print               "PHASE 2: Resetting statistics for steady state"
+print               "======================================================================"
+
+unfix               gfix
+unfix               gtfix  
+unfix               gpfix
+unfix               hfix
+unfix               mfix
+unfix		        sfix
+
+fix                 gfix ave/grid all 1 1000 1000 c_gcomp[*] ave running
+fix                 gtfix ave/grid all 1 1000 1000 c_gtcomp[*] ave running
+fix                 gpfix ave/grid all 1 1000 1000 c_gpcomp[*] ave running
+fix                 hfix ave/grid all 1 1000 1000 c_hfcomp[*] ave running
+fix                 mfix ave/grid all 1 1000 1000 c_mfcomp[*] ave running
+
+fix		            sfix ave/surf all 1 1000 1000 c_scomp[*] ave running
+
+dump                gdump grid all 1000 grid.*.dat id xc yc f_gfix[*] f_gtfix[*] f_gpfix[*] f_hfix[*] f_mfix[*]
+ 
+dump     		    sdump surf all 1000 surf.*.dat c_sgeom[*] f_sfix[*]
+
+print               "         Running steady state (4000 steps)"
+print               "======================================================================"
+
+run             4000
+
+################################################################################
+# SIMULATION COMPLETE
+################################################################################
+
+print               "======================================================================"
+print               "SIMULATION COMPLETE - FULL Run"
+print               "======================================================================"
+
+
