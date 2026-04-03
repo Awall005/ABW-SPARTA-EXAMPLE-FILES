@@ -1,0 +1,148 @@
+################################################################################
+# SPARTA Couette Flow - Bird Chapter 12.3 Argon/Helium Mixture Viscosity Measurement
+################################################################################
+
+################################################################################
+# INITIALIZATION
+################################################################################
+
+seed                12345 
+dimension           2     
+global              gridcut 0.0 comm/sort yes
+
+################################################################################
+# BOUNDARY CONDITIONS
+################################################################################
+
+boundary            p s p
+surf_collide        1 diffuse 293.0 1.0
+surf_collide        2 diffuse 293.0 1.0 translate 300.0 0 0
+bound_modify        ylo collide 1
+bound_modify        yhi collide 2
+
+################################################################################
+# DOMAIN GEOMETRY
+################################################################################
+
+create_box          0 0.01 0 1.0 -0.0005 0.0005
+
+################################################################################
+# GRID SETUP
+################################################################################
+
+create_grid         1 220 1 
+balance_grid        rcb cell
+
+################################################################################
+# GAS SPECIES AND MIXTURE
+################################################################################
+
+species             gas.species Ar He
+mixture             gas Ar He temp 293.0 vstream 300.0 0.0 0.0 nrho 1.4e20
+mixture             gas Ar frac 0.629
+mixture             gas He frac 0.371
+
+################################################################################
+# PARTICLE WEIGHTING AND INITIALIZATION
+################################################################################
+
+# fnum calc nrho = 1.4e20, 220 cells, 50 particals per cell, fake vol = 0.01*1*1
+# fnum = 1.4e20*(0.01*1*1)/(220*50) = 1.27e14, give 11023 particals
+
+global              fnum 1.27e14
+# nrho 1.4e20 
+create_particles    gas n 0
+
+################################################################################
+# COLLISION MODEL
+################################################################################
+
+collide             vss gas arhe.vss 
+
+################################################################################
+# COMPUTE: GRID PROPERTIES
+################################################################################
+
+compute             gcomp grid all all u v w massrho nrho temp
+compute             gtcomp thermal/grid all all temp 
+compute             gpcomp thermal/grid all all press
+compute             hfcomp eflux/grid all species heatx heaty heatz
+compute             mfcomp pflux/grid all species momxy
+
+################################################################################
+# TIME-AVERAGING FIXES (will be reset after transient)
+################################################################################
+
+fix                 gfix ave/grid all 10 1000 10000 c_gcomp[*]
+fix                 gtfix ave/grid all 10 1000 10000 c_gtcomp[*] 
+fix                 gpfix ave/grid all 10 1000 10000 c_gpcomp[*]
+fix                 hfix ave/grid all 10 1000 10000 c_hfcomp[*]
+fix                 mfix ave/grid all 10 1000 10000 c_mfcomp[*]
+
+################################################################################
+# OUTPUT FILES (will be enabled after transient)
+################################################################################
+
+dump                gdump grid all 500 grid.*.dat id yc f_gfix[*] f_gtfix[*] f_gpfix[*] f_hfix[*] f_mfix[*]
+
+################################################################################
+# STATISTICS OUTPUT
+################################################################################
+
+stats               500 
+stats_style         step cpu np nattempt ncoll nscoll nscheck
+
+################################################################################
+# TIME INTEGRATION
+################################################################################
+
+timestep            2.5e-6
+
+################################################################################
+# PHASE 1: TRANSIENT PERIOD (DISCARD DATA)
+################################################################################
+
+undump              gdump
+
+print               "======================================================================"
+print               "BIRD CHAPTER 12.3 SIMULATION"
+print               "======================================================================"
+print               "PHASE 1: Running transient period (250000 steps)"
+print               "======================================================================"
+
+run                 250000
+
+################################################################################
+# PHASE 2: STEADY STATE PERIOD (SAVE DATA)
+################################################################################
+
+print               "======================================================================"
+print               "PHASE 2: Resetting statistics for steady state"
+print               "======================================================================"
+
+unfix               gfix
+unfix               gtfix  
+unfix               gpfix
+unfix               hfix
+unfix               mfix
+
+fix                 gfix ave/grid all 1 500 500 c_gcomp[*] ave running
+fix                 gtfix ave/grid all 1 500 500 c_gtcomp[*] ave running
+fix                 gpfix ave/grid all 1 500 500 c_gpcomp[*] ave running
+fix                 hfix ave/grid all 1 500 500 c_hfcomp[*] ave running
+fix                 mfix ave/grid all 1 500 500 c_mfcomp[*] ave running
+
+dump                gdump grid all 50000 grid.*.dat id yc f_gfix[*] f_gtfix[*] f_gpfix[*] f_hfix[*] f_mfix[*]
+
+print               "         Running steady state (100000 steps)"
+print               "======================================================================"
+
+run                 100000
+
+################################################################################
+# SIMULATION COMPLETE
+################################################################################
+
+print               "======================================================================"
+print               "SIMULATION COMPLETE - BIRD CHAPTER 12.3"
+print               "======================================================================"
