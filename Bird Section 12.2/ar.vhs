@@ -1,4 +1,4 @@
-# VSS/VHS collision model parameters for each species
+# VHS collision model parameters for each species
 
 # species (or species pair)
 # diameter (m) – From Table A3 Bird for VSS, From Table A2 if VHS
