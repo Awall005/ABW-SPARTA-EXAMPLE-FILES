@@ -1,0 +1,115 @@
+################################################################################
+# 2d axisymmetric flow around a probe with diffuse reflections
+#
+# Note:
+#  - The "comm/sort” option to the “global” command is used to match MPI runs.
+#  - The “twopass” option is used to match Kokkos runs.
+# The "comm/sort" and "twopass" options should not be used for production runs.
+################################################################################
+
+########## INITIALIZATION ############
+seed	    	    12345
+dimension   	    2
+global              gridcut 0.0 comm/sort yes
+
+######### BOUNDARY CONDITIONS ###########
+boundary	    o ar p
+
+######## DOMAIN GEOMETRY ##########
+create_box          -0.0296 0.12040 0.0 0.12 -0.5 0.5
+
+######## GRID SETUP ###############
+create_grid 	    800 800 1 
+balance_grid        rcb cell
+# Rebalancing the how the processors are loaded as was done in artical
+fix                 1 balance 40000 1.3 rcb cell
+
+######## GAS SPECIES AND MIXTURE ######################
+species		    air.species N2
+mixture		    air N2 vstream 1463.27 0.0 0.0 temp 13.32 nrho 3.869e20
+
+
+######## SIMULATION PARTICAL WEIGHTING ##########
+# fnum given in text
+global		    fnum 3.6e16
+#global          weight cell volume
+global          weight cell radius
+
+
+####### GAS COLLISION MODEL #############
+collide		    vss air air.vss
+collide_modify  rotate smooth vibrate no
+
+fix             in emit/face air xlo twopass
+
+######## SURFACE GEOMETRY AND COLLISION MODEL ##############
+read_surf           data.probe_fine origin 0 0 0 
+surf_collide	    1 diffuse 300.0 1.0
+surf_modify         all collide 1
+
+######## COMPUTE: GRID PROPERTIES #################
+compute             gcomp grid all all u v w massrho nrho trot
+compute             gtcomp thermal/grid all all temp 
+compute             gpcomp thermal/grid all all press
+compute             hfcomp eflux/grid all species heatx heaty heatz
+compute             mfcomp pflux/grid all species momxy
+
+###### COMPUTE/FIX/DUMP SURFACE PROPERTIES ####
+compute 	        scomp surf all air press shx shy shz etot ke 
+compute             sgeom property/surf all id xc yc area
+
+###### STATISTICS OUTPUT ###########
+stats               100 
+stats_style         step cpu np nattempt ncoll nscoll nscheck
+
+###### GLOBAL TIMESTEP SIZE #############
+timestep 	    1.3e-7
+
+
+##### TRANISENT RUN ###########
+
+print               "======================================================================"
+print               "FULL Interplanetary Probe SIMULATION"
+print               "======================================================================"
+print               "PHASE 1: Running transient period (8000 steps)"
+print               "======================================================================"
+
+run 		    100000
+
+
+#### STEADY STATE PERIOD (SAVE DATA) ##########
+
+
+
+print               "======================================================================"
+print               "PHASE 2: Resetting statistics for steady state"
+print               "======================================================================"
+
+
+fix                 gfix ave/grid all 1 1000 1000 c_gcomp[*] ave running
+fix                 gtfix ave/grid all 1 1000 1000 c_gtcomp[*] ave running
+fix                 gpfix ave/grid all 1 1000 1000 c_gpcomp[*] ave running
+fix                 hfix ave/grid all 1 1000 1000 c_hfcomp[*] ave running
+fix                 mfix ave/grid all 1 1000 1000 c_mfcomp[*] ave running
+
+fix		            sfix ave/surf all 1 1000 1000 c_scomp[*] ave running
+
+dump                gdump grid all 1000 grid.*.dat id xc yc f_gfix[*] f_gtfix[*] f_gpfix[*] f_hfix[*] f_mfix[*]
+ 
+dump     	    sdump surf all 1000 surf.*.dat c_sgeom[*] f_sfix[*]
+
+print               "         Running steady state (4000 steps)"
+print               "======================================================================"
+
+run             20000
+
+################################################################################
+# SIMULATION COMPLETE
+################################################################################
+
+print               "======================================================================"
+print               "SIMULATION COMPLETE - FULL Run"
+print               "======================================================================"
+
+
+
